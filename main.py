@@ -14,6 +14,7 @@ import numpy as np
 
 before_image=None
 most_color=np.array([0,0,0])
+
 def auto_canny(image, sigma=0.33):
     image = cv2.GaussianBlur(image, (5, 5), 0) #(3,3)
 
@@ -25,29 +26,35 @@ def auto_canny(image, sigma=0.33):
     return edged
 
 def find_rectangle(image):
+    img=image.copy()
     image=cv2.GaussianBlur(image,(5,5),1)
 
-    alpha2=1.0
-    # image = np.clip((1+alpha2) * image - 128 * alpha2, 0, 255).astype(np.uint8)
     image = cv2.cvtColor(image,cv2.COLOR_BGR2HSV)
-    # image[:,:,1] = cv2.add(image[:,:,1], 250)  # 채도 값을 50만큼 증가시
-    # image[:,:,2] = cv2.add(image[:,:,2], 255)
-    # image = cv2.cvtColor(image,cv2.COLOR_HSV2BGR)
+
     h,s,v=cv2.split(image)
+    s=np.where(s<30,255,s)
 
-    # s= np.where(s<100 , 0, np.where(s>=100 , 255, s))
-    v = np.where(v<100, 0, np.where(v>=100, 255, v))
-    # bgrLower = np.array([0,0,0])
-    # bgrUpper = np.array([30,30,30])
-    # img_mask = cv2.inRange(image, bgrLower, bgrUpper)
-    # image = cv2.bitwise_and(image, image, mask=img_mask)
-    image = cv2.bitwise_and(s,v)
-    image=v
+    s= np.where(s<100 , 0, np.where(s>=100 , 255, s))
+    v = np.where(v<80, 0, np.where(v>=80, 255, v))
+    image_msk = cv2.bitwise_and(s,v)
+
+    image = cv2.bitwise_and(img,img,mask=image_msk)
+    cv2.imshow('g',image)
+    cv2.waitKey(1)
     edges=auto_canny(image)
+    return image
 
-    # return v
+    corners =cv2.goodFeaturesToTrack(image_msk,maxCorners=4, qualityLevel=0.01, minDistance=200)
+    if corners is not None:
+        corners=np.int0(corners)
+        for corner in corners:
+            x,y=corner.ravel()
+            cv2.circle(image,(x,y),5,(0,255,0),-1)
+
+    
 
     contours, _ = cv2.findContours(edges, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_NONE)
+
     try:
         max_contour = max(contours, key=cv2.contourArea)
     except:
@@ -60,19 +67,23 @@ def find_rectangle(image):
         contours, _ = cv2.findContours(inverted_binary, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
         
         max_contour = max(contours, key=cv2.contourArea)
-        
+        rotateRect = cv2.minAreaRect(max_contour)
+        box=cv2.boxPoints(rotateRect)
+        box=np.int0(box)
+
         epsilon = 0.02 * cv2.arcLength(max_contour, True)
         approx = cv2.approxPolyDP(max_contour, epsilon, True)
         
         if len(approx) < 4:
             return None
-    
+        # print(rotateRect)
+        # approx=box
     return [approx[0][0], approx[1][0], approx[2][0], approx[3][0]]
 
 def detect(image):
-    # image=cv2.imread(filepath,cv2.IMREAD_COLOR) #(R,G,B)로 읽음
     global most_color
     global before_image
+
     img=image.copy()
     if before_image is None:
         print('start')
@@ -82,7 +93,8 @@ def detect(image):
         hist1 = cv2.calcHist([h1], [0], None, [256], [0, 256])
         hist2 = cv2.calcHist([h2], [0], None, [256], [0, 256])
         similarity = cv2.compareHist(hist1, hist2, cv2.HISTCMP_CORREL)
-        if similarity<0.999:
+        #print(similarity)
+        if similarity<0.97:
             most_color=[0,0,0]
             print('changed')
     before_image=img
@@ -93,8 +105,7 @@ def detect(image):
     y_pos = H
     x_pos = W
     app=find_rectangle(image)
-    # return app
-
+    return most_common_color(app)
     if app is None:
         return image
 
@@ -106,9 +117,10 @@ def detect(image):
     mat = cv2.getPerspectiveTransform(original_coord, warped_coord)
  
     warped_img = cv2.warpPerspective(img, mat, (x_pos, y_pos))
-    return warped_img
+    cv2.imshow('f',warped_img)
+    cv2.waitKey(1)
 
-    # return most_common_color(warped_img)
+    return most_common_color(warped_img)
 
 def most_common_color(image):
     global most_color
@@ -128,12 +140,13 @@ def most_common_color(image):
     img_mask_b = cv2.inRange(img_hsv,(120-20,30,30),(120+20,255,255))
     img_mask_r1 = cv2.inRange(img_hsv,(0,30,30),(10,255,255))
     img_mask_r2 = cv2.inRange(img_hsv,(170,30,30),(255,255,255))
-    img_mask_g = cv2.inRange(img_hsv,(60-20,30,30),(60+20,255,255))
+    img_mask_black=cv2.inRange(img_hsv,(0,0,0),(20,20,20))
     img_mask_all=cv2.inRange(img_hsv,(0,0,0),(255,255,255))
+
     blue=np.count_nonzero(img_mask_b ==255)
     red=np.count_nonzero(img_mask_r1==255)+np.count_nonzero(img_mask_r2==255)
-    green=np.count_nonzero(img_mask_g==255)
-    other=np.count_nonzero(img_mask_all==255)-red-blue
+    other=np.count_nonzero(img_mask_all==255)-red-blue-np.count_nonzero(img_mask_black==255)
+
     color_count={'B':blue,'R':red,'Other':other}
     color=max(color_count, key=color_count.get)
 
