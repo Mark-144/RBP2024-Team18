@@ -117,11 +117,11 @@ def most_common_color(image):
         bP=most_color[0]/Csum
         rP=most_color[1]/Csum
         oP=most_color[2]/Csum
-        if rP>0.8:
+        if rP>0.7:
             return 'R'
-        elif bP>0.8:
+        elif bP>0.7:
             return 'B'
-        elif oP>0.8:
+        elif oP>0.7:
             return 'Other'
     img_hsv = cv2.cvtColor(image,cv2.COLOR_BGR2HSV)
 
