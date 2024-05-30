@@ -32,53 +32,22 @@ def find_rectangle(image):
     image = cv2.cvtColor(image,cv2.COLOR_BGR2HSV)
 
     h,s,v=cv2.split(image)
-    s=np.where(s<30,255,s)
+    s=np.where(s<20,255,s)
 
     s= np.where(s<100 , 0, np.where(s>=100 , 255, s))
     v = np.where(v<80, 0, np.where(v>=80, 255, v))
     image_msk = cv2.bitwise_and(s,v)
 
     image = cv2.bitwise_and(img,img,mask=image_msk)
-    cv2.imshow('g',image)
-    cv2.waitKey(1)
+
+    cv2.putText(image,most_common_color(image),(100,100),cv2.FONT_HERSHEY_SIMPLEX,1,(255,0,0),2)
+    
+    # cv2.imshow('g',image)
+    # cv2.waitKey(1)
+
     edges=auto_canny(image)
     return image
 
-    corners =cv2.goodFeaturesToTrack(image_msk,maxCorners=4, qualityLevel=0.01, minDistance=200)
-    if corners is not None:
-        corners=np.int0(corners)
-        for corner in corners:
-            x,y=corner.ravel()
-            cv2.circle(image,(x,y),5,(0,255,0),-1)
-
-    
-
-    contours, _ = cv2.findContours(edges, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_NONE)
-
-    try:
-        max_contour = max(contours, key=cv2.contourArea)
-    except:
-        return None
-
-    epsilon = 0.04 * cv2.arcLength(max_contour, True)
-    approx = cv2.approxPolyDP(max_contour, epsilon, True)
-    if len(approx) != 4:
-        inverted_binary = cv2.bitwise_not(edges)
-        contours, _ = cv2.findContours(inverted_binary, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
-        
-        max_contour = max(contours, key=cv2.contourArea)
-        rotateRect = cv2.minAreaRect(max_contour)
-        box=cv2.boxPoints(rotateRect)
-        box=np.int0(box)
-
-        epsilon = 0.02 * cv2.arcLength(max_contour, True)
-        approx = cv2.approxPolyDP(max_contour, epsilon, True)
-        
-        if len(approx) < 4:
-            return None
-        # print(rotateRect)
-        # approx=box
-    return [approx[0][0], approx[1][0], approx[2][0], approx[3][0]]
 
 def detect(image):
     global most_color
@@ -93,10 +62,10 @@ def detect(image):
         hist1 = cv2.calcHist([h1], [0], None, [256], [0, 256])
         hist2 = cv2.calcHist([h2], [0], None, [256], [0, 256])
         similarity = cv2.compareHist(hist1, hist2, cv2.HISTCMP_CORREL)
-        #print(similarity)
+        # print(similarity)
         if similarity<0.97:
             most_color=[0,0,0]
-            print('changed')
+            # print('changed')
     before_image=img
     H,W,C=img.shape # 행, 열, 타입(R,G,B)
 
@@ -105,22 +74,9 @@ def detect(image):
     y_pos = H
     x_pos = W
     app=find_rectangle(image)
+    
+
     return most_common_color(app)
-    if app is None:
-        return image
-
-    edge=[app[0],app[3],app[1],app[2]]
-
-    original_coord = np.float32(edge)
-    warped_coord = np.float32([[0, 0], [x_pos, 0], [0, y_pos], [x_pos, y_pos]])
- 
-    mat = cv2.getPerspectiveTransform(original_coord, warped_coord)
- 
-    warped_img = cv2.warpPerspective(img, mat, (x_pos, y_pos))
-    cv2.imshow('f',warped_img)
-    cv2.waitKey(1)
-
-    return most_common_color(warped_img)
 
 def most_common_color(image):
     global most_color
@@ -161,6 +117,7 @@ def most_common_color(image):
 class DetermineColor(Node):
     def __init__(self):
         super().__init__('color_detector')
+        #'/camera/color/image_raw'
         self.image_sub = self.create_subscription(Image, '/camera/color/image_raw', self.callback, 10)
         self.color_pub = self.create_publisher(Header, '/rotate_cmd', 10)
         self.bridge = CvBridge()
@@ -168,7 +125,7 @@ class DetermineColor(Node):
     def callback(self, data):
         try:
             # listen image topic
-            image = self.bridge.imgmsg_to_cv2(data, 'bgr8')
+            image = self.bridge.imgmsg_to_cv2(data,'bgr8')
             # prepare rotate_cmd msg
             # DO NOT DELETE THE BELOW THREE LINES!
             msg = Header()
